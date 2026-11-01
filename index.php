@@ -459,8 +459,7 @@
         .meaning-box {
             padding: 1rem 1.15rem;
             min-height: 64px;
-            border: 1px solid var(--line);
-            border-left: 4px solid var(--accent);
+            border: 1px solid var(--accent);
             border-radius: 14px;
             background: var(--surface-soft);
         }
@@ -481,6 +480,154 @@
         .meaning-box .error-text {
             color: var(--danger);
             font-weight: 500;
+        }
+
+        /* ---------- Word details (POS / examples / synonyms) ---------- */
+        .phonetic {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            margin-top: 0.35rem;
+            padding: 0.08rem 0.55rem;
+            border: 1px dashed var(--line);
+            border-radius: 999px;
+            color: var(--muted);
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .phonetic i {
+            font-size: 0.75rem;
+            color: var(--accent);
+        }
+
+        .pos-blocks {
+            margin-top: 0.7rem;
+        }
+
+        .pos-block {
+            padding: 0.6rem 0.85rem;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            background: var(--item-bg);
+        }
+
+        .pos-block + .pos-block {
+            margin-top: 0.45rem;
+        }
+
+        .pos-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            padding: 0.14rem 0.62rem;
+            border: 1px solid var(--accent-line);
+            border-radius: 999px;
+            background: var(--accent-soft);
+            color: var(--accent-strong);
+            font-size: 0.7rem;
+            font-weight: 700;
+            line-height: 1.6;
+            overflow-wrap: anywhere;
+        }
+
+        .pos-badge i {
+            font-size: 0.62rem;
+        }
+
+        .def-list {
+            margin: 0.45rem 0 0;
+            padding-left: 1.15rem;
+        }
+
+        .def-list li {
+            font-size: 0.88rem;
+            line-height: 1.55;
+            color: var(--text);
+            overflow-wrap: anywhere;
+        }
+
+        .def-list li + li {
+            margin-top: 0.3rem;
+        }
+
+        .def-example {
+            margin-top: 0.15rem;
+            color: var(--muted);
+            font-size: 0.82rem;
+            font-style: italic;
+            line-height: 1.55;
+            overflow-wrap: anywhere;
+        }
+
+        .def-example i {
+            font-size: 0.7rem;
+            font-style: normal;
+            color: var(--accent);
+        }
+
+        .sem-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: flex-start;
+            gap: 0.4rem;
+            margin-top: 0.6rem;
+        }
+
+        .sem-row + .sem-row {
+            margin-top: 0.4rem;
+        }
+
+        .sem-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            min-width: 104px;
+            padding-top: 0.28rem;
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: var(--muted);
+            white-space: nowrap;
+        }
+
+        .sem-label i {
+            font-size: 0.7rem;
+        }
+
+        .sem-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.35rem;
+        }
+
+        .syn-chip {
+            border-color: rgba(22, 163, 74, 0.45);
+            color: var(--success);
+        }
+
+        .syn-chip:hover {
+            border-color: var(--success);
+        }
+
+        .ant-chip {
+            border-color: rgba(220, 38, 38, 0.45);
+            color: var(--danger);
+        }
+
+        .ant-chip:hover {
+            border-color: var(--danger);
+        }
+
+        .pos-tag {
+            margin-left: 0.25rem;
+            padding: 0.03rem 0.45rem;
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            background: var(--surface-soft);
+            color: var(--muted);
+            font-size: 0.6rem;
+            font-weight: 600;
+            white-space: nowrap;
         }
 
         /* ---------- Sub words ---------- */
@@ -982,7 +1129,7 @@
             const MIN_SUB_LENGTH = 3;
             const BATCH_SIZE = 4;
 
-            const DICT_CACHE = JSON.parse(localStorage.getItem('dictCache') || '{}');
+            const DICT_CACHE = JSON.parse(localStorage.getItem('dictCache_v2') || '{}');
             const TRANSLATE_CACHE = JSON.parse(localStorage.getItem('transCache') || '{}');
             let searchToken = 0;
 
@@ -994,7 +1141,7 @@
 
             function saveCaches() {
                 try {
-                    localStorage.setItem('dictCache', JSON.stringify(DICT_CACHE));
+                    localStorage.setItem('dictCache_v2', JSON.stringify(DICT_CACHE));
                     localStorage.setItem('transCache', JSON.stringify(TRANSLATE_CACHE));
                 } catch (e) { }
             }
@@ -1024,7 +1171,7 @@
 
             function fetchDictionary(word) {
                 word = word.trim().toLowerCase();
-                if (!word) return Promise.resolve({ found: false, definitions: [] });
+                if (!word) return Promise.resolve({ found: false, meanings: [], phonetic: '' });
 
                 if (DICT_CACHE[word]) return Promise.resolve(DICT_CACHE[word]);
 
@@ -1034,23 +1181,50 @@
                     dataType: 'json',
                     timeout: 10000
                 }).then(function (data) {
-                    const definitions = [];
+                    const meanings = [];
+                    let phonetic = '';
+
                     if (Array.isArray(data) && data.length) {
                         data.forEach(entry => {
+                            if (!phonetic && entry.phonetic) phonetic = entry.phonetic;
+
                             (entry.meanings || []).forEach(meaning => {
-                                (meaning.definitions || []).forEach(def => {
-                                    if (def.definition) definitions.push(def.definition);
+                                const definitions = (meaning.definitions || [])
+                                    .filter(def => def.definition)
+                                    .slice(0, 3)
+                                    .map(def => ({
+                                        definition: def.definition,
+                                        example: def.example || ''
+                                    }));
+
+                                const synonyms = [...new Set([
+                                    ...(meaning.synonyms || []),
+                                    ...(meaning.definitions || []).flatMap(def => def.synonyms || [])
+                                ])].slice(0, 8);
+
+                                const antonyms = [...new Set([
+                                    ...(meaning.antonyms || []),
+                                    ...(meaning.definitions || []).flatMap(def => def.antonyms || [])
+                                ])].slice(0, 8);
+
+                                if (!definitions.length && !synonyms.length && !antonyms.length) return;
+
+                                meanings.push({
+                                    pos: meaning.partOfSpeech || '',
+                                    definitions: definitions,
+                                    synonyms: synonyms,
+                                    antonyms: antonyms
                                 });
                             });
                         });
                     }
-                    const unique = [...new Set(definitions)].slice(0, 2);
-                    const result = { found: unique.length > 0, definitions: unique };
+
+                    const result = { found: meanings.length > 0, meanings: meanings.slice(0, 4), phonetic: phonetic };
                     DICT_CACHE[word] = result;
                     saveCaches();
                     return result;
                 }).catch(function () {
-                    const result = { found: false, definitions: [], apiError: true };
+                    const result = { found: false, meanings: [], phonetic: '', apiError: true };
                     DICT_CACHE[word] = result;
                     return result;
                 });
@@ -1085,15 +1259,50 @@
             async function processWord(word) {
                 const dictionary = await fetchDictionary(word);
                 if (!dictionary.found) {
-                    return { word, found: false, meaning: '', definition: '' };
+                    return { word, found: false, meaning: '', meanings: [], phonetic: '' };
                 }
                 const meaning = await translateToBangla(word);
                 return {
                     word,
                     found: true,
                     meaning: meaning || 'বাংলা অর্থ পাওয়া যায়নি',
-                    definition: dictionary.definitions[0] || ''
+                    meanings: dictionary.meanings,
+                    phonetic: dictionary.phonetic || ''
                 };
+            }
+
+            const POS_BN = {
+                noun: 'বিশেষ্য',
+                verb: 'ক্রিয়া',
+                adjective: 'বিশেষণ',
+                adverb: 'ক্রিয়া-বিশেষণ',
+                pronoun: 'সর্বনাম',
+                preposition: 'অব্যয়',
+                conjunction: 'সংযোজক',
+                interjection: 'অবিস্ময়ক',
+                exclamation: 'অবিস্ময়ক',
+                determiner: 'নির্ধারক',
+                numeral: 'সংখ্যা',
+                particle: 'কণা'
+            };
+
+            function posLabel(pos) {
+                pos = (pos || '').toLowerCase();
+                if (POS_BN[pos]) return POS_BN[pos] + ' · ' + pos;
+                return pos || '';
+            }
+
+            function semRowHTML(label, words, chipClass) {
+                if (!words || !words.length) return '';
+                const chips = words.map(word =>
+                    `<button type="button" class="chip sem-chip ${chipClass}" data-word="${escapeHtml(word)}">${escapeHtml(word)}</button>`
+                ).join('');
+                return `
+                    <div class="sem-row">
+                        <span class="sem-label">${label}</span>
+                        <div class="sem-chips">${chips}</div>
+                    </div>
+                `;
             }
 
             async function renderMainWord(word, token) {
@@ -1105,9 +1314,27 @@
                     return;
                 }
 
+                const posBlocks = result.meanings.map(meaning => {
+                    const items = meaning.definitions.map(def =>
+                        `<li>${escapeHtml(def.definition)}${def.example ? `<div class="def-example"><i class="bi bi-quote" aria-hidden="true"></i> ${escapeHtml(def.example)}</div>` : ''}</li>`
+                    ).join('');
+                    return `
+                        <div class="pos-block">
+                            <span class="pos-badge"><i class="bi bi-tag-fill" aria-hidden="true"></i>${escapeHtml(posLabel(meaning.pos))}</span>
+                            ${items ? `<ol class="def-list">${items}</ol>` : ''}
+                        </div>
+                    `;
+                }).join('');
+
+                const syns = [...new Set(result.meanings.flatMap(meaning => meaning.synonyms))].slice(0, 8);
+                const ants = [...new Set(result.meanings.flatMap(meaning => meaning.antonyms))].slice(0, 8);
+
                 $('#mainMeaning').html(`
                     <span class="meaning-text">${escapeHtml(result.meaning)}</span>
-                    ${result.definition ? `<div class="def-tooltip" style="display:block;">${escapeHtml(result.definition)}</div>` : ''}
+                    ${result.phonetic ? `<div class="phonetic"><i class="bi bi-volume-up" aria-hidden="true"></i> ${escapeHtml(result.phonetic)}</div>` : ''}
+                    ${posBlocks ? `<div class="pos-blocks">${posBlocks}</div>` : ''}
+                    ${semRowHTML('<i class="bi bi-plus-circle" aria-hidden="true"></i> সমগোত্র শব্দ', syns, 'syn-chip')}
+                    ${semRowHTML('<i class="bi bi-dash-circle" aria-hidden="true"></i> বিপরীত শব্দ', ants, 'ant-chip')}
                 `);
             }
 
@@ -1159,9 +1386,15 @@
                                 .addClass('has-meaning')
                                 .html(escapeHtml(result.meaning));
 
-                            if (result.definition) {
+                            const firstMeaning = result.meanings[0];
+                            if (firstMeaning && firstMeaning.pos) {
+                                row.find('.sub-word').append(`<span class="pos-tag">${escapeHtml(posLabel(firstMeaning.pos))}</span>`);
+                            }
+
+                            const entry = (firstMeaning ? firstMeaning.definitions : []).find(def => def.definition);
+                            if (entry) {
                                 row.addClass('has-def');
-                                row.append(`<div class="def-tooltip">${escapeHtml(result.definition)}</div>`);
+                                row.append(`<div class="def-tooltip">${escapeHtml(entry.definition)}${entry.example ? ` — <em>${escapeHtml(entry.example)}</em>` : ''}</div>`);
                                 row.on('click', function () {
                                     $(this).toggleClass('show-def');
                                 });
@@ -1286,6 +1519,14 @@
 
             $('#exampleHint').on('click', '.chip', function () {
                 $('#wordInput').val($(this).attr('data-word'));
+                syncClearButton();
+                performSearch();
+            });
+
+            $('#mainResult').on('click', '.sem-chip', function () {
+                const word = $(this).attr('data-word');
+                if (!word) return;
+                $('#wordInput').val(word);
                 syncClearButton();
                 performSearch();
             });
